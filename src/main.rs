@@ -15,30 +15,32 @@ use windows::{
 };
 
 fn main() -> windows::core::Result<()> {
+    // StringMap test
+    unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
+    let instance = unsafe { RoActivateInstance("Windows.Foundation.Collections.StringMap") }?;
+    dbg!(&instance);
+    let map = windows::core::Interface::cast::<StringMap>(&instance)?;
+    map.Insert("Hello", "World")?;
+    dbg!(&map);
+    println!("Map size: {}", map.Size()?);
+
+    // Window enumeration to get HWND of window to be captured
     let mut window: HWND = HWND::default();
     let ptr = &mut window as *mut HWND;
     let par = LPARAM(ptr as isize);
     unsafe { EnumWindows(Some(enum_window), par) };
-
     dbg!(window);
 
-    unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
-
-    let instance = unsafe { RoActivateInstance("Windows.Foundation.Collections.StringMap") }?;
-
-    dbg!(&instance);
-    let map = windows::core::Interface::cast::<StringMap>(&instance)?;
-    map.Insert("Hello", "World")?;
-
-    dbg!(&map);
-    println!("Map size: {}", map.Size()?);
-
+    // Create GrpahicsCaptureItem
     let class_name: HSTRING = HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureItem");
-    let interop = unsafe { RoGetActivationFactory::<HSTRING, IGraphicsCaptureItemInterop>(class_name) }?;
+    let interop =
+        unsafe { RoGetActivationFactory::<HSTRING, IGraphicsCaptureItemInterop>(class_name) }?;
     dbg!(&interop);
-    let item = unsafe {interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window)}?;
+    let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window) }?;
     let name = item.DisplayName()?;
     println!("Window to be capture: {}", name);
+
+    // Create IDirectD3Device
 
     Ok(())
 }
@@ -71,7 +73,7 @@ extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
 
     unsafe {
         let mut cloaked: i32 = 0;
-        let ptr = &mut cloaked as *mut _ as *mut core::ffi::c_void;
+        let ptr = &mut cloaked as *mut _ as *mut _;
         let result =
             DwmGetWindowAttribute(window, DWMWA_CLOAKED, ptr, mem::size_of::<i32>() as u32);
         if result.is_ok() && cloaked as u32 == DWM_CLOAKED_SHELL {
