@@ -9,6 +9,10 @@ edition = "2018"
 [dependencies.windows]
 version = "0.33.0"
 features = [
+    "alloc",
+    "Foundation_Collections",
     "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_WinRT",
     "Win32_UI_WindowsAndMessaging",
 ]
