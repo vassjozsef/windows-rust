@@ -11,8 +11,11 @@ version = "0.33.0"
 features = [
     "alloc",
     "Foundation_Collections",
+    "Graphics_Capture",
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_System_Com",
     "Win32_System_WinRT",
+    "Win32_System_WinRT_Graphics_Capture",
     "Win32_UI_WindowsAndMessaging",
 ]
