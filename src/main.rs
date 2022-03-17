@@ -1,10 +1,11 @@
 use std::{mem, thread, time};
 use windows::{
-    core::{Interface, HSTRING, PWSTR},
-    Foundation::{Collections::StringMap},
+    core::{IInspectable, Interface, HSTRING, PWSTR},
+    Foundation::{Collections::StringMap, TypedEventHandler},
     Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem},
     Graphics::DirectX::Direct3D11::IDirect3DDevice,
     Graphics::DirectX::DirectXPixelFormat,
+    System::DispatcherQueueController,
     Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM},
     Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_1},
     Win32::Graphics::Direct3D11::{
@@ -15,7 +16,10 @@ use windows::{
     Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
     Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice,
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
-    Win32::System::WinRT::{RoActivateInstance, RoGetActivationFactory},
+    Win32::System::WinRT::{
+        CreateDispatcherQueueController, DispatcherQueueOptions, RoActivateInstance,
+        RoGetActivationFactory, DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
+    },
     Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetAncestor, GetShellWindow, GetWindowLongA, GetWindowTextW, IsWindowVisible,
         GA_ROOT, GWL_STYLE, WINDOW_STYLE, WS_DISABLED,
@@ -31,6 +35,10 @@ fn main() -> windows::core::Result<()> {
     map.Insert("Hello", "World")?;
     dbg!(&map);
     println!("Map size: {}", map.Size()?);
+
+    // pump
+    let controller = create_dispatcher_queu_controller()?;
+    let queue = controller.DispatcherQueue()?;
 
     // Window enumeration to get HWND of window to be captured
     let mut window: HWND = HWND::default();
@@ -71,11 +79,30 @@ fn main() -> windows::core::Result<()> {
     )?;
 
     let session = frame_pool.CreateCaptureSession(item)?;
+
+    type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
+    let handler = Handler::new(move |sender, _| {
+        println!("Frame arrived");
+        Ok(())
+    });
+
+    let frame_arrived = frame_pool.FrameArrived(handler)?;
+
     session.StartCapture()?;
 
     thread::sleep(time::Duration::from_secs(5));
 
     Ok(())
+}
+
+fn create_dispatcher_queu_controller() -> windows::core::Result<DispatcherQueueController> {
+    let options = DispatcherQueueOptions {
+        dwSize: mem::size_of::<DispatcherQueueOptions>() as u32,
+        threadType: DQTYPE_THREAD_CURRENT,
+        apartmentType: DQTAT_COM_STA,
+    };
+
+    unsafe { CreateDispatcherQueueController(options) }
 }
 
 fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
