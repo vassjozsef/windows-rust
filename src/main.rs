@@ -1,4 +1,4 @@
-use std::{mem, thread, time};
+use std::mem;
 use windows::{
     core::{IInspectable, Interface, HSTRING, PWSTR},
     Foundation::{Collections::StringMap, TypedEventHandler},
@@ -11,7 +11,6 @@ use windows::{
     Win32::Graphics::Direct3D11::{
         D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
     },
-    Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
     Win32::Graphics::Dxgi::IDXGIDevice,
     Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
     Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice,
@@ -21,8 +20,12 @@ use windows::{
         RoGetActivationFactory, DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
     },
     Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetAncestor, GetShellWindow, GetWindowLongA, GetWindowTextW, IsWindowVisible,
-        GA_ROOT, GWL_STYLE, WINDOW_STYLE, WS_DISABLED,
+        EnumWindows, GetAncestor, GetMessageA, GetShellWindow, GetWindowLongA, GetWindowTextW,
+        IsWindowVisible, GA_ROOT, GWL_STYLE, MSG, WINDOW_STYLE, WM_QUIT, WS_DISABLED,
+    },
+    Win32::{
+        Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
+        UI::WindowsAndMessaging::DispatchMessageA,
     },
 };
 
@@ -90,9 +93,14 @@ fn main() -> windows::core::Result<()> {
 
     session.StartCapture()?;
 
-    thread::sleep(time::Duration::from_secs(5));
-
-    Ok(())
+    let mut message = MSG::default();
+    loop {
+        unsafe { GetMessageA(&mut message, None, 0, 0) };
+        if message.message == WM_QUIT {
+            return Ok(());
+        }
+        unsafe { DispatchMessageA(&message) };
+    }
 }
 
 fn create_dispatcher_queu_controller() -> windows::core::Result<DispatcherQueueController> {
