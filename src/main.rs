@@ -1,8 +1,10 @@
-use std::mem;
+use std::{mem, thread, time};
 use windows::{
-    core::{HSTRING, PWSTR},
-    Foundation::Collections::StringMap,
-    Graphics::Capture::GraphicsCaptureItem,
+    core::{Interface, HSTRING, PWSTR},
+    Foundation::{Collections::StringMap},
+    Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem},
+    Graphics::DirectX::Direct3D11::IDirect3DDevice,
+    Graphics::DirectX::DirectXPixelFormat,
     Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM},
     Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_1},
     Win32::Graphics::Direct3D11::{
@@ -33,8 +35,8 @@ fn main() -> windows::core::Result<()> {
     // Window enumeration to get HWND of window to be captured
     let mut window: HWND = HWND::default();
     let ptr = &mut window as *mut HWND;
-    let par = LPARAM(ptr as isize);
-    unsafe { EnumWindows(Some(enum_window), par) };
+    let param = LPARAM(ptr as isize);
+    unsafe { EnumWindows(Some(enum_window), param) };
     dbg!(window);
 
     // Create GrpahicsCaptureItem
@@ -44,16 +46,34 @@ fn main() -> windows::core::Result<()> {
     dbg!(&interop);
     let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window) }?;
     let name = item.DisplayName()?;
-    println!("Window to be capture: {}", name);
+    let dim = item.Size()?;
+    println!(
+        "Window to be capture: {}, dimensions: {} x {}",
+        name, dim.Width, dim.Height
+    );
 
     // Create IDirectD3Device
-    let d3_device = create_d3d_device().ok().unwrap();
-    dbg!(&d3_device);
-    let dxgi_device_ptr = &d3_device as *const _ as *const IDXGIDevice;
-    let dxgi_device = unsafe {&*dxgi_device_ptr};
-    dbg!(dxgi_device);
+    let d3d_device = create_d3d_device().ok().unwrap();
+    dbg!(&d3d_device);
+    let dxgi_device = d3d_device.cast::<IDXGIDevice>()?;
+    dbg!(&dxgi_device);
     let direct3d_device = unsafe { CreateDirect3D11DeviceFromDXGIDevice(dxgi_device) }?;
-    dbg!(direct3d_device);
+    dbg!(&direct3d_device);
+    let device = direct3d_device.cast::<IDirect3DDevice>()?;
+    dbg!(&device);
+
+    // Start capture
+    let frame_pool = Direct3D11CaptureFramePool::Create(
+        device,
+        DirectXPixelFormat::B8G8R8A8UIntNormalized,
+        2,
+        dim,
+    )?;
+
+    let session = frame_pool.CreateCaptureSession(item)?;
+    session.StartCapture()?;
+
+    thread::sleep(time::Duration::from_secs(5));
 
     Ok(())
 }
