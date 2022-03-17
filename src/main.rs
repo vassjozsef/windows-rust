@@ -9,7 +9,9 @@ use windows::{
         D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
     },
     Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
+    Win32::Graphics::Dxgi::IDXGIDevice,
     Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
+    Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice,
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
     Win32::System::WinRT::{RoActivateInstance, RoGetActivationFactory},
     Win32::UI::WindowsAndMessaging::{
@@ -45,8 +47,13 @@ fn main() -> windows::core::Result<()> {
     println!("Window to be capture: {}", name);
 
     // Create IDirectD3Device
-    let device = create_d3d_device().ok().unwrap();
-    dbg!(device);
+    let d3_device = create_d3d_device().ok().unwrap();
+    dbg!(&d3_device);
+    let dxgi_device_ptr = &d3_device as *const _ as *const IDXGIDevice;
+    let dxgi_device = unsafe {&*dxgi_device_ptr};
+    dbg!(dxgi_device);
+    let direct3d_device = unsafe { CreateDirect3D11DeviceFromDXGIDevice(dxgi_device) }?;
+    dbg!(direct3d_device);
 
     Ok(())
 }
