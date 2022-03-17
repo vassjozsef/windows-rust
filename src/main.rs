@@ -3,7 +3,11 @@ use windows::{
     core::{HSTRING, PWSTR},
     Foundation::Collections::StringMap,
     Graphics::Capture::GraphicsCaptureItem,
-    Win32::Foundation::{BOOL, HWND, LPARAM},
+    Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM},
+    Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_1},
+    Win32::Graphics::Direct3D11::{
+        D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
+    },
     Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
     Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
@@ -41,8 +45,33 @@ fn main() -> windows::core::Result<()> {
     println!("Window to be capture: {}", name);
 
     // Create IDirectD3Device
+    let device = create_d3d_device().ok().unwrap();
+    dbg!(device);
 
     Ok(())
+}
+
+fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
+    let flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    let device_type = D3D_DRIVER_TYPE_HARDWARE;
+    let mut device = None;
+    let levels = &[D3D_FEATURE_LEVEL_11_1];
+
+    unsafe {
+        D3D11CreateDevice(
+            None,
+            device_type,
+            HINSTANCE::default(),
+            flags,
+            levels.as_ptr(),
+            levels.len() as u32,
+            D3D11_SDK_VERSION,
+            &mut device,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+        .map(|()| device.unwrap())
+    }
 }
 
 extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
