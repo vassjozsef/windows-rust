@@ -85,13 +85,15 @@ fn main() -> windows::core::Result<()> {
     type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
     let handler = Handler::new(move |sender, _| {
         frame_count = frame_count + 1;
-        if frame_count % 100 == 0 {
-            println!("Frames captured: {}", frame_count);
-        }
 
         let sender = sender.as_ref().unwrap();
         let frame = sender.TryGetNextFrame()?;
         let size = frame.ContentSize()?;
+
+        if frame_count % 100 == 0 {
+            println!("Frames captured: {}, last size: {:?}", frame_count, size);
+        }
+
         if dim != size {
             dim = size;
 
