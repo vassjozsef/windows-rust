@@ -1,6 +1,6 @@
 use std::mem;
 use windows::{
-    core::{IInspectable, Interface, HSTRING, PWSTR},
+    core::{IInspectable, Interface, HSTRING},
     Foundation::{Collections::StringMap, TypedEventHandler},
     Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem},
     Graphics::DirectX::Direct3D11::IDirect3DDevice,
@@ -144,8 +144,7 @@ fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
             device_type,
             HINSTANCE::default(),
             flags,
-            levels.as_ptr(),
-            levels.len() as u32,
+            levels,
             D3D11_SDK_VERSION,
             &mut device,
             std::ptr::null_mut(),
@@ -193,8 +192,7 @@ extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
 
     unsafe {
         let mut text: [u16; 512] = [0; 512];
-        let ptr: PWSTR = PWSTR(&mut text as *mut u16);
-        let len = GetWindowTextW(window, ptr, text.len() as i32);
+        let len = GetWindowTextW(window, &mut text);
         if len == 0 {
             return true.into();
         }
