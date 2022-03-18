@@ -41,7 +41,7 @@ fn main() -> windows::core::Result<()> {
 
     // pump
     let controller = create_dispatcher_queu_controller()?;
-    let queue = controller.DispatcherQueue()?;
+    let _queue = controller.DispatcherQueue()?;
 
     // Window enumeration to get HWND of window to be captured
     let mut window: HWND = HWND::default();
@@ -57,11 +57,8 @@ fn main() -> windows::core::Result<()> {
     dbg!(&interop);
     let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window) }?;
     let name = item.DisplayName()?;
-    let dim = item.Size()?;
-    println!(
-        "Window to be capture: {}, dimensions: {} x {}",
-        name, dim.Width, dim.Height
-    );
+    let mut dim = item.Size()?;
+    println!("Window to be capture: {}, dimensions: {:?}", name, dim);
 
     // Create IDirectD3Device
     let d3d_device = create_d3d_device().ok().unwrap();
@@ -83,9 +80,25 @@ fn main() -> windows::core::Result<()> {
 
     let session = frame_pool.CreateCaptureSession(item)?;
 
+    let mut frame_count = 0;
+
     type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
     let handler = Handler::new(move |sender, _| {
-        println!("Frame arrived");
+        frame_count = frame_count + 1;
+        if frame_count % 100 == 0 {
+            println!("Frames captured: {}", frame_count);
+        }
+
+        let sender = sender.as_ref().unwrap();
+        let frame = sender.TryGetNextFrame()?;
+        let size = frame.ContentSize()?;
+        if dim != size {
+            dim = size;
+
+            println!("Frame size changed to {:?}", dim);
+            // some error of passing pointer between threads
+            // frame_pool.Recreate(device,  DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
+        }
         Ok(())
     });
 
@@ -97,6 +110,10 @@ fn main() -> windows::core::Result<()> {
     loop {
         unsafe { GetMessageA(&mut message, None, 0, 0) };
         if message.message == WM_QUIT {
+            println!("Exiting");
+            frame_pool.RemoveFrameArrived(frame_arrived)?;
+            frame_pool.Close()?;
+            session.Close()?;
             return Ok(());
         }
         unsafe { DispatchMessageA(&message) };
