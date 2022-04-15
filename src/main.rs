@@ -29,6 +29,12 @@ use windows::{
     },
 };
 
+#[derive(Debug, Clone)]
+pub struct Window {
+    pub hwnd: HWND,
+    pub name: String,
+}
+
 fn main() -> windows::core::Result<()> {
     // StringMap test
     unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
@@ -44,18 +50,17 @@ fn main() -> windows::core::Result<()> {
     let _queue = controller.DispatcherQueue()?;
 
     // Window enumeration to get HWND of window to be captured
-    let mut window: HWND = HWND::default();
-    let ptr = &mut window as *mut HWND;
-    let param = LPARAM(ptr as isize);
+    let mut windows: Vec<Window> = Vec::new();
+    let param = LPARAM(&mut windows as *mut Vec<Window> as isize);
     unsafe { EnumWindows(Some(enum_window), param) };
-    dbg!(window);
+    dbg!(&windows);
 
     // Create GrpahicsCaptureItem
     let class_name: HSTRING = HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureItem");
     let interop =
         unsafe { RoGetActivationFactory::<HSTRING, IGraphicsCaptureItemInterop>(class_name) }?;
     dbg!(&interop);
-    let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window) }?;
+    let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(windows[0].hwnd) }?;
     let name = item.DisplayName()?;
     let mut dim = item.Size()?;
     println!("Window to be capture: {}, dimensions: {:?}", name, dim);
@@ -200,10 +205,12 @@ extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
 
         print!("{:?}: {}\n", window, text);
 
-        let ptr = out.0 as *mut HWND;
-        *ptr = window;
-
-        // stop after first window
-        false.into()
+        let windows = &mut *(out.0 as *mut Vec<Window>);
+        windows.push(Window {
+            hwnd: window,
+            name: text,
+        });
     }
+
+    return true.into();
 }
