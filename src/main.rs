@@ -1,24 +1,5 @@
-use std::mem;
 use windows::{
-    core::{IInspectable, Interface, HSTRING},
-    Foundation::{Collections::StringMap, TypedEventHandler},
-    Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem},
-    Graphics::DirectX::Direct3D11::IDirect3DDevice,
-    Graphics::DirectX::DirectXPixelFormat,
-    System::DispatcherQueueController,
-    Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM},
-    Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_1},
-    Win32::Graphics::Direct3D11::{
-        D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
-    },
-    Win32::Graphics::Dxgi::IDXGIDevice,
-    Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
-    Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice,
-    Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
-    Win32::System::WinRT::{
-        CreateDispatcherQueueController, DispatcherQueueOptions, RoActivateInstance,
-        RoGetActivationFactory, DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
-    },
+    Win32::Foundation::{BOOL, HWND, LPARAM},
     Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetAncestor, GetMessageA, GetShellWindow, GetWindowLongA, GetWindowTextW,
         IsWindowVisible, GA_ROOT, GWL_STYLE, MSG, WINDOW_STYLE, WM_QUIT, WS_DISABLED,
@@ -29,6 +10,10 @@ use windows::{
     },
 };
 
+use crate::capturer::Capturer;
+
+mod capturer;
+
 #[derive(Debug, Clone)]
 pub struct Window {
     pub hwnd: HWND,
@@ -36,126 +21,23 @@ pub struct Window {
 }
 
 fn main() -> windows::core::Result<()> {
-    // StringMap test
-    unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
-    let instance = unsafe { RoActivateInstance("Windows.Foundation.Collections.StringMap") }?;
-    dbg!(&instance);
-    let map = windows::core::Interface::cast::<StringMap>(&instance)?;
-    map.Insert("Hello", "World")?;
-    dbg!(&map);
-    println!("Map size: {}", map.Size()?);
-
-    // pump
-    let controller = create_dispatcher_queu_controller()?;
-    let _queue = controller.DispatcherQueue()?;
-
     // Window enumeration to get HWND of window to be captured
     let mut windows: Vec<Window> = Vec::new();
     let param = LPARAM(&mut windows as *mut Vec<Window> as isize);
     unsafe { EnumWindows(Some(enum_window), param) };
     dbg!(&windows);
 
-    // Create GrpahicsCaptureItem
-    let class_name: HSTRING = HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureItem");
-    let interop =
-        unsafe { RoGetActivationFactory::<HSTRING, IGraphicsCaptureItemInterop>(class_name) }?;
-    dbg!(&interop);
-    let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(windows[0].hwnd) }?;
-    let name = item.DisplayName()?;
-    let mut dim = item.Size()?;
-    println!("Window to be capture: {}, dimensions: {:?}", name, dim);
-
-    // Create IDirectD3Device
-    let d3d_device = create_d3d_device().ok().unwrap();
-    dbg!(&d3d_device);
-    let dxgi_device = d3d_device.cast::<IDXGIDevice>()?;
-    dbg!(&dxgi_device);
-    let direct3d_device = unsafe { CreateDirect3D11DeviceFromDXGIDevice(dxgi_device) }?;
-    dbg!(&direct3d_device);
-    let device = direct3d_device.cast::<IDirect3DDevice>()?;
-    dbg!(&device);
-
-    // Start capture
-    let frame_pool = Direct3D11CaptureFramePool::Create(
-        device,
-        DirectXPixelFormat::B8G8R8A8UIntNormalized,
-        2,
-        dim,
-    )?;
-
-    let session = frame_pool.CreateCaptureSession(item)?;
-
-    let mut frame_count = 0;
-
-    type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
-    let handler = Handler::new(move |sender, _| {
-        frame_count = frame_count + 1;
-
-        let sender = sender.as_ref().unwrap();
-        let frame = sender.TryGetNextFrame()?;
-        let size = frame.ContentSize()?;
-
-        if frame_count % 100 == 0 {
-            println!("Frames captured: {}, last size: {:?}", frame_count, size);
-        }
-
-        if dim != size {
-            dim = size;
-
-            println!("Frame size changed to {:?}", dim);
-            // some error of passing pointer between threads
-            // frame_pool.Recreate(device,  DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
-        }
-        Ok(())
-    });
-
-    let frame_arrived = frame_pool.FrameArrived(handler)?;
-
-    session.StartCapture()?;
+    let capturer = Capturer::new(windows[0].hwnd)?;
+    capturer.start()?;
 
     let mut message = MSG::default();
     loop {
         unsafe { GetMessageA(&mut message, None, 0, 0) };
         if message.message == WM_QUIT {
             println!("Exiting");
-            frame_pool.RemoveFrameArrived(frame_arrived)?;
-            frame_pool.Close()?;
-            session.Close()?;
-            return Ok(());
+            return capturer.stop();
         }
         unsafe { DispatchMessageA(&message) };
-    }
-}
-
-fn create_dispatcher_queu_controller() -> windows::core::Result<DispatcherQueueController> {
-    let options = DispatcherQueueOptions {
-        dwSize: mem::size_of::<DispatcherQueueOptions>() as u32,
-        threadType: DQTYPE_THREAD_CURRENT,
-        apartmentType: DQTAT_COM_STA,
-    };
-
-    unsafe { CreateDispatcherQueueController(options) }
-}
-
-fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
-    let flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    let device_type = D3D_DRIVER_TYPE_HARDWARE;
-    let mut device = None;
-    let levels = &[D3D_FEATURE_LEVEL_11_1];
-
-    unsafe {
-        D3D11CreateDevice(
-            None,
-            device_type,
-            HINSTANCE::default(),
-            flags,
-            levels,
-            D3D11_SDK_VERSION,
-            &mut device,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-        )
-        .map(|()| device.unwrap())
     }
 }
 
@@ -188,8 +70,12 @@ extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
     unsafe {
         let mut cloaked: i32 = 0;
         let ptr = &mut cloaked as *mut _ as *mut _;
-        let result =
-            DwmGetWindowAttribute(window, DWMWA_CLOAKED, ptr, mem::size_of::<i32>() as u32);
+        let result = DwmGetWindowAttribute(
+            window,
+            DWMWA_CLOAKED,
+            ptr,
+            std::mem::size_of::<i32>() as u32,
+        );
         if result.is_ok() && cloaked as u32 == DWM_CLOAKED_SHELL {
             return true.into();
         }
