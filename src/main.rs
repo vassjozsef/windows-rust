@@ -21,24 +21,29 @@ pub struct Window {
 }
 
 fn main() -> windows::core::Result<()> {
+    println!("Thread: {:?}", std::thread::current().id());
     // Window enumeration to get HWND of window to be captured
     let mut windows: Vec<Window> = Vec::new();
     let param = LPARAM(&mut windows as *mut Vec<Window> as isize);
     unsafe { EnumWindows(Some(enum_window), param) };
     dbg!(&windows);
 
-    let capturer = Capturer::new(windows[0].hwnd)?;
-    capturer.start()?;
+    let handle = std::thread::spawn(move || {
+        // must be created on the same thread as the message loop
+        let capturer = Capturer::new(windows[0].hwnd).ok().unwrap();
+        capturer.start().ok();
+        let duration = std::time::Duration::from_secs(5);
+        let start = std::time::SystemTime::now();
+        let mut message = MSG::default();
+        while std::time::SystemTime::now() < start + duration {
+            unsafe { GetMessageA(&mut message, None, 0, 0) };
+            unsafe { DispatchMessageA(&message) };
+        }
+        capturer.stop().ok();
+    });
 
-    let duration = std::time::Duration::from_secs(5);
-    let start = std::time::SystemTime::now();
+    handle.join().unwrap();
 
-    let mut message = MSG::default();
-    while std::time::SystemTime::now() < start + duration {
-        unsafe { GetMessageA(&mut message, None, 0, 0) };
-        unsafe { DispatchMessageA(&message) };
-    }
-    capturer.stop()?;
     Ok(())
 }
 
@@ -90,7 +95,12 @@ extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
         }
         let text = String::from_utf16_lossy(&text[..len as usize]);
 
-        print!("{:?}: {}\n", window, text);
+        println!(
+            "Thread: {:?}, window: {:?}: {}",
+            std::thread::current().id(),
+            window,
+            text
+        );
 
         let windows = &mut *(out.0 as *mut Vec<Window>);
         windows.push(Window {

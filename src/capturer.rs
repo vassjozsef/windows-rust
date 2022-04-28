@@ -110,7 +110,12 @@ impl Capturer {
             let size = frame.ContentSize()?;
 
             if frame_count % 10 == 0 {
-                println!("Frames captured: {}, last size: {:?}", frame_count, size);
+                println!(
+                    "Thread: {:?}, frames captured: {}, last size: {:?}",
+                    std::thread::current().id(),
+                    frame_count,
+                    size
+                );
             }
 
             if dim != size {
