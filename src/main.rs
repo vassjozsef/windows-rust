@@ -2,7 +2,7 @@ use windows::{
     Win32::Foundation::{BOOL, HWND, LPARAM},
     Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetAncestor, GetMessageA, GetShellWindow, GetWindowLongA, GetWindowTextW,
-        IsWindowVisible, GA_ROOT, GWL_STYLE, MSG, WINDOW_STYLE, WM_QUIT, WS_DISABLED,
+        IsWindowVisible, GA_ROOT, GWL_STYLE, MSG, WINDOW_STYLE, WS_DISABLED,
     },
     Win32::{
         Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
@@ -30,15 +30,16 @@ fn main() -> windows::core::Result<()> {
     let capturer = Capturer::new(windows[0].hwnd)?;
     capturer.start()?;
 
+    let duration = std::time::Duration::from_secs(5);
+    let start = std::time::SystemTime::now();
+
     let mut message = MSG::default();
-    loop {
+    while std::time::SystemTime::now() < start + duration {
         unsafe { GetMessageA(&mut message, None, 0, 0) };
-        if message.message == WM_QUIT {
-            println!("Exiting");
-            return capturer.stop();
-        }
         unsafe { DispatchMessageA(&message) };
     }
+    capturer.stop()?;
+    Ok(())
 }
 
 extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {

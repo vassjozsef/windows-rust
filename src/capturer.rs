@@ -58,6 +58,8 @@ pub struct Capturer {
     session: GraphicsCaptureSession,
 
     frame_arrived: EventRegistrationToken,
+
+    _controller: DispatcherQueueController,
 }
 
 impl Capturer {
@@ -66,7 +68,6 @@ impl Capturer {
 
         // pump
         let controller = create_dispatcher_queu_controller()?;
-        let _queue = controller.DispatcherQueue()?;
 
         // Create IDirectD3Device
         let d3d_device = create_d3d_device().ok().unwrap();
@@ -108,7 +109,7 @@ impl Capturer {
             let frame = sender.TryGetNextFrame()?;
             let size = frame.ContentSize()?;
 
-            if frame_count % 100 == 0 {
+            if frame_count % 10 == 0 {
                 println!("Frames captured: {}, last size: {:?}", frame_count, size);
             }
 
@@ -128,6 +129,7 @@ impl Capturer {
             frame_pool: frame_pool,
             session: session,
             frame_arrived: frame_arrived,
+            _controller: controller,
         })
     }
 
