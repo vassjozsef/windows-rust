@@ -1,12 +1,10 @@
 use windows::{
     Win32::Foundation::{BOOL, HWND, LPARAM},
+    Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
+    Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
     Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetAncestor, GetMessageA, GetShellWindow, GetWindowLongA, GetWindowTextW,
-        IsWindowVisible, GA_ROOT, GWL_STYLE, MSG, WINDOW_STYLE, WS_DISABLED,
-    },
-    Win32::{
-        Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
-        UI::WindowsAndMessaging::DispatchMessageA,
+        DispatchMessageA, EnumWindows, GetAncestor, GetMessageA, GetShellWindow, GetWindowLongA,
+        GetWindowTextW, IsWindowVisible, GA_ROOT, GWL_STYLE, MSG, WINDOW_STYLE, WS_DISABLED,
     },
 };
 
@@ -27,6 +25,8 @@ fn main() -> windows::core::Result<()> {
     let param = LPARAM(&mut windows as *mut Vec<Window> as isize);
     unsafe { EnumWindows(Some(enum_window), param) };
     dbg!(&windows);
+
+    unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
 
     let handle = std::thread::spawn(move || {
         // must be created on the same thread as the message loop

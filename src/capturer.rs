@@ -11,7 +11,6 @@ use windows::{
         D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
     },
     Win32::Graphics::Dxgi::IDXGIDevice,
-    Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
     Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice,
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
     Win32::System::WinRT::{
@@ -64,8 +63,6 @@ pub struct Capturer {
 
 impl Capturer {
     pub fn new(window: HWND) -> windows::core::Result<Capturer> {
-        unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
-
         // pump
         let controller = create_dispatcher_queu_controller()?;
 
