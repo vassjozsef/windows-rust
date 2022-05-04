@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+
 use windows::{
     core::{IInspectable, Interface, HSTRING},
     Foundation::{EventRegistrationToken, TypedEventHandler},
@@ -52,17 +55,22 @@ fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
 }
 
 pub struct Capturer {
+    _hwnd: HWND,
+
     frame_pool: Direct3D11CaptureFramePool,
 
     session: GraphicsCaptureSession,
 
     frame_arrived: EventRegistrationToken,
 
+    // not sure it is needed, we just keeping it here for now
     _controller: DispatcherQueueController,
+
+    pub frame_count: Arc<AtomicU32>,
 }
 
 impl Capturer {
-    pub fn new(window: HWND) -> windows::core::Result<Capturer> {
+    pub fn new(hwnd: HWND) -> windows::core::Result<Capturer> {
         // pump
         let controller = create_dispatcher_queu_controller()?;
 
@@ -81,7 +89,7 @@ impl Capturer {
         let interop =
             unsafe { RoGetActivationFactory::<HSTRING, IGraphicsCaptureItemInterop>(class_name) }?;
         dbg!(&interop);
-        let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window) }?;
+        let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(hwnd) }?;
         let name = item.DisplayName()?;
         let mut dim = item.Size()?;
         println!("Window to be capture: {}, dimensions: {:?}", name, dim);
@@ -93,24 +101,24 @@ impl Capturer {
             2,
             dim,
         )?;
-
         let session = frame_pool.CreateCaptureSession(item)?;
 
-        let mut frame_count = 0;
-
+        let frame_count = Arc::new(AtomicU32::new(0));
+        let frame_count_handler = frame_count.clone();
+        let frame_pool_handler = frame_pool.clone();
         type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
         let handler = Handler::new(move |sender, _| {
-            frame_count = frame_count + 1;
+            let count = frame_count_handler.fetch_add(1, Ordering::Acquire);
 
             let sender = sender.as_ref().unwrap();
             let frame = sender.TryGetNextFrame()?;
             let size = frame.ContentSize()?;
 
-            if frame_count % 10 == 0 {
+            if count % 10 == 0 {
                 println!(
                     "Thread: {:?}, frames captured: {}, last size: {:?}",
                     std::thread::current().id(),
-                    frame_count,
+                    count,
                     size
                 );
             }
@@ -119,8 +127,9 @@ impl Capturer {
                 dim = size;
 
                 println!("Frame size changed to {:?}", dim);
-                // some error of passing pointer between threads
-                // frame_pool.Recreate(device,  DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
+                // device still has threading issues, but FramePool is fine
+                // frame_pool_handler.as_ref().Recreate(device_wrapper_handler.as_ref().device,  DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
+                frame_pool_handler.DispatcherQueue()?;
             }
             Ok(())
         });
@@ -128,11 +137,17 @@ impl Capturer {
         let frame_arrived = frame_pool.FrameArrived(handler)?;
 
         Ok(Capturer {
+            _hwnd: hwnd,
             frame_pool: frame_pool,
             session: session,
             frame_arrived: frame_arrived,
             _controller: controller,
+            frame_count: frame_count,
         })
+    }
+
+    pub fn start(&self) -> windows::core::Result<()> {
+        self.session.StartCapture()
     }
 
     pub fn stop(&self) -> windows::core::Result<()> {
@@ -140,9 +155,5 @@ impl Capturer {
         self.frame_pool.Close()?;
         self.session.Close()?;
         Ok(())
-    }
-
-    pub fn start(&self) -> windows::core::Result<()> {
-        self.session.StartCapture()
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use windows::{
     Win32::Foundation::{BOOL, HWND, LPARAM},
     Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
@@ -28,19 +30,27 @@ fn main() -> windows::core::Result<()> {
 
     unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
 
+    let should_quit = Arc::new(AtomicBool::new(false));
+    let should_quit_handle = should_quit.clone();
     let handle = std::thread::spawn(move || {
         // must be created on the same thread as the message loop
-        let capturer = Capturer::new(windows[0].hwnd).ok().unwrap();
+        let capturer = Capturer::new(windows[0].hwnd).unwrap();
         capturer.start().ok();
-        let duration = std::time::Duration::from_secs(5);
-        let start = std::time::SystemTime::now();
         let mut message = MSG::default();
-        while std::time::SystemTime::now() < start + duration {
+        while !should_quit_handle.load(Ordering::Acquire) {
             unsafe { GetMessageA(&mut message, None, 0, 0) };
             unsafe { DispatchMessageA(&message) };
         }
+        println!(
+            "Frames captured: {:?}",
+            capturer.frame_count.load(Ordering::Acquire)
+        );
         capturer.stop().ok();
     });
+
+    let duration = std::time::Duration::from_secs(5);
+    std::thread::sleep(duration);
+    should_quit.store(true, Ordering::SeqCst);
 
     handle.join().unwrap();
 
