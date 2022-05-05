@@ -150,7 +150,7 @@ impl Capturer {
 
                 println!("Frame size changed to {:?}", dim);
                 // device still has threading issues, but FramePool is fine (it has clone implemented)
-                // frame_pool_handler.as_ref().Recreate(device_wrapper_handler.as_ref().device,  DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
+                // c_frame_pool.Recreate(device, DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
                 c_frame_pool.DispatcherQueue()?;
             }
             Ok(())

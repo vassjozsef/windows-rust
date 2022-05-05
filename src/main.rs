@@ -20,14 +20,14 @@ fn main() -> windows::core::Result<()> {
     unsafe { CoInitializeEx(core::ptr::null_mut(), COINIT_MULTITHREADED)? };
 
     let should_quit = Arc::new(AtomicBool::new(false));
-    let should_quit_handle = should_quit.clone();
+    let c_should_quit = should_quit.clone();
     let (tx, rx) = mpsc::channel();
     let handle = std::thread::spawn(move || {
         // must be created on the same thread as the message loop
         let capturer = Capturer::new(windows[0].hwnd).unwrap();
         capturer.start().ok();
         let mut message = MSG::default();
-        while !should_quit_handle.load(Ordering::Acquire) {
+        while !c_should_quit.load(Ordering::Acquire) {
             unsafe { GetMessageA(&mut message, None, 0, 0) };
             unsafe { DispatchMessageA(&message) };
             if let Some(frame) = capturer.frame.lock().unwrap().take() {
@@ -41,8 +41,12 @@ fn main() -> windows::core::Result<()> {
 
     while let Some(frame) = rx.recv().ok() {
         let id = frame.id;
-        if id % 30 == 0 {
-            println!("Frame: {:?}", frame);
+        if id % 100 == 0 {
+            println!(
+                "Thread: {:?}, frame: {:?}",
+                std::thread::current().id(),
+                frame
+            );
         }
 
         if id >= 500 {
