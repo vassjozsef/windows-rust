@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use windows::{
     Win32::Foundation::{BOOL, HWND, LPARAM},
     Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
@@ -10,7 +10,7 @@ use windows::{
     },
 };
 
-use crate::capturer::Capturer;
+use crate::capturer::{Capturer, Frame};
 
 mod capturer;
 
@@ -32,6 +32,7 @@ fn main() -> windows::core::Result<()> {
 
     let should_quit = Arc::new(AtomicBool::new(false));
     let should_quit_handle = should_quit.clone();
+    let (tx, rx) = mpsc::channel();
     let handle = std::thread::spawn(move || {
         // must be created on the same thread as the message loop
         let capturer = Capturer::new(windows[0].hwnd).unwrap();
@@ -40,17 +41,25 @@ fn main() -> windows::core::Result<()> {
         while !should_quit_handle.load(Ordering::Acquire) {
             unsafe { GetMessageA(&mut message, None, 0, 0) };
             unsafe { DispatchMessageA(&message) };
+            let frame = capturer.frame.lock().unwrap();
+            // cannot send MutexGuard<Frame> over channel, creating a copy
+            let frame = Frame::new(frame.ts, frame.id);
+            tx.send(frame).ok();
         }
-        println!(
-            "Frames captured: {:?}",
-            capturer.frame_count.load(Ordering::Acquire)
-        );
+        let count = capturer.frame_count.load(Ordering::Acquire);
+        println!("Frames captured: {}", count);
         capturer.stop().ok();
     });
 
-    let duration = std::time::Duration::from_secs(5);
-    std::thread::sleep(duration);
-    should_quit.store(true, Ordering::SeqCst);
+    while let Some(frame) = rx.recv().ok() {
+        if frame.id % 30 == 0 {
+            println!("Frame: {:?}", frame);
+        }
+
+        if frame.id >= 500 {
+            should_quit.store(true, Ordering::SeqCst);
+        }
+    }
 
     handle.join().unwrap();
 
