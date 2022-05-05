@@ -10,7 +10,7 @@ use windows::{
     },
 };
 
-use crate::capturer::{Capturer, Frame};
+use crate::capturer::Capturer;
 
 mod capturer;
 
@@ -41,10 +41,9 @@ fn main() -> windows::core::Result<()> {
         while !should_quit_handle.load(Ordering::Acquire) {
             unsafe { GetMessageA(&mut message, None, 0, 0) };
             unsafe { DispatchMessageA(&message) };
-            let frame = capturer.frame.lock().unwrap();
-            // cannot send MutexGuard<Frame> over channel, creating a copy
-            let frame = Frame::new(frame.ts, frame.id);
-            tx.send(frame).ok();
+            if let Some(frame) = capturer.frame.lock().unwrap().take() {
+                tx.send(frame).ok();
+            }
         }
         let count = capturer.frame_count.load(Ordering::Acquire);
         println!("Frames captured: {}", count);
@@ -52,11 +51,12 @@ fn main() -> windows::core::Result<()> {
     });
 
     while let Some(frame) = rx.recv().ok() {
-        if frame.id % 30 == 0 {
+        let id = frame.id;
+        if id % 30 == 0 {
             println!("Frame: {:?}", frame);
         }
 
-        if frame.id >= 500 {
+        if id >= 500 {
             should_quit.store(true, Ordering::SeqCst);
         }
     }

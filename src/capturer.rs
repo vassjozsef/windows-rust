@@ -62,13 +62,8 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(ts: Instant, id: u32) -> Frame {
+    pub fn new(ts: Instant, id: u32) -> Self {
         Frame { ts: ts, id: id }
-    }
-
-    pub fn update(&mut self, ts: Instant, id: u32) {
-        self.ts = ts;
-        self.id = id;
     }
 }
 
@@ -86,7 +81,7 @@ pub struct Capturer {
 
     pub frame_count: Arc<AtomicU32>,
 
-    pub frame: Arc<Mutex<Frame>>,
+    pub frame: Arc<Mutex<Option<Frame>>>,
 }
 
 impl Capturer {
@@ -124,20 +119,22 @@ impl Capturer {
         let session = frame_pool.CreateCaptureSession(item)?;
 
         let frame_count = Arc::new(AtomicU32::new(0));
-        let frame_count_handler = frame_count.clone();
-        let frame_pool_handler = frame_pool.clone();
-        let frame = Arc::new(Mutex::new(Frame::new(Instant::now(), 0)));
-        let frame_handler = frame.clone();
+        let c_frame_count = frame_count.clone();
+        let c_frame_pool = frame_pool.clone();
+        let frame = Arc::new(Mutex::new(None));
+        let c_frame = frame.clone();
         type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
         let handler = Handler::new(move |sender, _| {
-            let count = frame_count_handler.fetch_add(1, Ordering::Acquire);
+            let count = c_frame_count.fetch_add(1, Ordering::Acquire);
 
             let sender = sender.as_ref().unwrap();
             let captured_frame = sender.TryGetNextFrame()?;
             let size = captured_frame.ContentSize()?;
 
-            let mut frame_handler_lock = frame_handler.lock().unwrap();
-            frame_handler_lock.update(Instant::now(), count);
+            c_frame
+                .lock()
+                .unwrap()
+                .replace(Frame::new(Instant::now(), count));
 
             if count % 10 == 0 {
                 println!(
@@ -154,7 +151,7 @@ impl Capturer {
                 println!("Frame size changed to {:?}", dim);
                 // device still has threading issues, but FramePool is fine (it has clone implemented)
                 // frame_pool_handler.as_ref().Recreate(device_wrapper_handler.as_ref().device,  DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
-                frame_pool_handler.DispatcherQueue()?;
+                c_frame_pool.DispatcherQueue()?;
             }
             Ok(())
         });
