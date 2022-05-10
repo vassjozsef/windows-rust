@@ -1,7 +1,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-
 use windows::{
     core::{IInspectable, Interface, HSTRING},
     Foundation::{EventRegistrationToken, TypedEventHandler},
@@ -12,10 +11,13 @@ use windows::{
     Win32::Foundation::{HINSTANCE, HWND},
     Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_1},
     Win32::Graphics::Direct3D11::{
-        D3D11CreateDevice, ID3D11Device, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_SDK_VERSION,
+        D3D11CreateDevice, ID3D11Device, ID3D11Texture2D, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        D3D11_SDK_VERSION,
     },
     Win32::Graphics::Dxgi::IDXGIDevice,
-    Win32::System::WinRT::Direct3D11::CreateDirect3D11DeviceFromDXGIDevice,
+    Win32::System::WinRT::Direct3D11::{
+        CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
+    },
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
     Win32::System::WinRT::{
         CreateDispatcherQueueController, DispatcherQueueOptions, RoGetActivationFactory,
@@ -130,6 +132,9 @@ impl Capturer {
             let sender = sender.as_ref().unwrap();
             let captured_frame = sender.TryGetNextFrame()?;
             let size = captured_frame.ContentSize()?;
+            let surface = captured_frame.Surface().ok().unwrap();
+            let access = surface.cast::<IDirect3DDxgiInterfaceAccess>()?;
+            let texture = unsafe { access.GetInterface::<ID3D11Texture2D>()? };
 
             c_frame
                 .lock()
@@ -138,10 +143,11 @@ impl Capturer {
 
             if count % 10 == 0 {
                 println!(
-                    "Thread: {:?}, frames captured: {}, last size: {:?}",
+                    "Thread: {:?}, frames captured: {}, last size: {:?}, texture: {:?}",
                     std::thread::current().id(),
                     count,
-                    size
+                    size,
+                    texture
                 );
             }
 
