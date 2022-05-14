@@ -69,6 +69,18 @@ impl Frame {
     }
 }
 
+pub struct IDirect3DDeviceWrapper {
+    pub device: IDirect3DDevice,
+}
+
+impl IDirect3DDeviceWrapper {
+    pub fn new(device: IDirect3DDevice) -> IDirect3DDeviceWrapper {
+        IDirect3DDeviceWrapper { device: device }
+    }
+}
+
+unsafe impl Send for IDirect3DDeviceWrapper {}
+
 pub struct Capturer {
     _hwnd: HWND,
 
@@ -113,7 +125,7 @@ impl Capturer {
 
         // Start capture
         let frame_pool = Direct3D11CaptureFramePool::Create(
-            device,
+            &device,
             DirectXPixelFormat::B8G8R8A8UIntNormalized,
             2,
             dim,
@@ -125,6 +137,7 @@ impl Capturer {
         let c_frame_pool = frame_pool.clone();
         let frame = Arc::new(Mutex::new(None));
         let c_frame = frame.clone();
+        let device_wrapper = IDirect3DDeviceWrapper::new(device);
         type Handler = TypedEventHandler<Direct3D11CaptureFramePool, IInspectable>;
         let handler = Handler::new(move |sender, _| {
             let count = c_frame_count.fetch_add(1, Ordering::Acquire);
@@ -152,12 +165,16 @@ impl Capturer {
             }
 
             if dim != size {
+                println!("Frame size changed to {:?}", size);
+
                 dim = size;
 
-                println!("Frame size changed to {:?}", dim);
-                // device still has threading issues, but FramePool is fine (it has clone implemented)
-                // c_frame_pool.Recreate(device, DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, dim);
-                c_frame_pool.DispatcherQueue()?;
+                c_frame_pool.Recreate(
+                    &device_wrapper.device,
+                    DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                    2,
+                    dim,
+                )?;
             }
             Ok(())
         });
