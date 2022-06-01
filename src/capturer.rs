@@ -7,7 +7,6 @@ use windows::{
     Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem},
     Graphics::DirectX::Direct3D11::IDirect3DDevice,
     Graphics::{Capture::GraphicsCaptureSession, DirectX::DirectXPixelFormat},
-    System::DispatcherQueueController,
     Win32::Foundation::{HINSTANCE, HWND},
     Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_1},
     Win32::Graphics::Direct3D11::{
@@ -19,21 +18,8 @@ use windows::{
         CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
     },
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
-    Win32::System::WinRT::{
-        CreateDispatcherQueueController, DispatcherQueueOptions, RoGetActivationFactory,
-        DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
-    },
+    Win32::System::WinRT::RoGetActivationFactory,
 };
-
-fn create_dispatcher_queu_controller() -> windows::core::Result<DispatcherQueueController> {
-    let options = DispatcherQueueOptions {
-        dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
-        threadType: DQTYPE_THREAD_CURRENT,
-        apartmentType: DQTAT_COM_STA,
-    };
-
-    unsafe { CreateDispatcherQueueController(options) }
-}
 
 fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
     let flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
@@ -83,26 +69,15 @@ unsafe impl Send for IDirect3DDeviceWrapper {}
 
 pub struct Capturer {
     _hwnd: HWND,
-
     frame_pool: Direct3D11CaptureFramePool,
-
     session: GraphicsCaptureSession,
-
     frame_arrived: EventRegistrationToken,
-
-    // not sure it is needed, we just keeping it here for now
-    _controller: DispatcherQueueController,
-
     pub frame_count: Arc<AtomicU32>,
-
     pub frame: Arc<Mutex<Option<Frame>>>,
 }
 
 impl Capturer {
     pub fn new(hwnd: HWND) -> windows::core::Result<Capturer> {
-        // pump
-        let controller = create_dispatcher_queu_controller()?;
-
         // Create IDirectD3Device
         let d3d_device = create_d3d_device().ok().unwrap();
         dbg!(&d3d_device);
@@ -124,7 +99,7 @@ impl Capturer {
         println!("Window to be capture: {}, dimensions: {:?}", name, dim);
 
         // Start capture
-        let frame_pool = Direct3D11CaptureFramePool::Create(
+        let frame_pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
             &device,
             DirectXPixelFormat::B8G8R8A8UIntNormalized,
             2,
@@ -186,7 +161,6 @@ impl Capturer {
             frame_pool: frame_pool,
             session: session,
             frame_arrived: frame_arrived,
-            _controller: controller,
             frame_count: frame_count,
             frame: frame,
         })

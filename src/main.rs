@@ -1,9 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
-use windows::{
-    Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED},
-    Win32::UI::WindowsAndMessaging::{DispatchMessageA, GetMessageA, MSG},
-};
+use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
 use crate::capturer::Capturer;
 use crate::window_enum::Windows;
@@ -12,7 +9,7 @@ mod capturer;
 mod window_enum;
 
 fn main() -> windows::core::Result<()> {
-    println!("Thread: {:?}", std::thread::current().id());
+    println!("Main thread: {:?}", std::thread::current().id());
     // Window enumeration to get HWND of window to be captured
     let windows = Windows::enumerate();
     dbg!(&windows);
@@ -23,13 +20,13 @@ fn main() -> windows::core::Result<()> {
     let c_should_quit = should_quit.clone();
     let (tx, rx) = mpsc::channel();
     let handle = std::thread::spawn(move || {
-        // must be created on the same thread as the message loop
+        println!(
+            "Creating capturer on thread: {:?}",
+            std::thread::current().id()
+        );
         let capturer = Capturer::new(windows[0].hwnd).unwrap();
         capturer.start().ok();
-        let mut message = MSG::default();
         while !c_should_quit.load(Ordering::Acquire) {
-            unsafe { GetMessageA(&mut message, None, 0, 0) };
-            unsafe { DispatchMessageA(&message) };
             if let Some(frame) = capturer.frame.lock().unwrap().take() {
                 tx.send(frame).ok();
             }
