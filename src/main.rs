@@ -6,6 +6,7 @@ use crate::capturer::Capturer;
 use crate::window_enum::Windows;
 
 mod capturer;
+mod sys;
 mod window_enum;
 
 fn main() -> windows::core::Result<()> {

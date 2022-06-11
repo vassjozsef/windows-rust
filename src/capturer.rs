@@ -1,8 +1,9 @@
+use crate::sys::{create_direct3d11_device_from_dxgi_device, ro_get_activation_factory};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::{
-    core::{IInspectable, Interface, HSTRING},
+    core::{Abi, Error, IInspectable, Interface, HRESULT, HSTRING},
     Foundation::{EventRegistrationToken, TypedEventHandler},
     Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem},
     Graphics::DirectX::Direct3D11::IDirect3DDevice,
@@ -14,11 +15,8 @@ use windows::{
         D3D11_SDK_VERSION,
     },
     Win32::Graphics::Dxgi::IDXGIDevice,
-    Win32::System::WinRT::Direct3D11::{
-        CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
-    },
+    Win32::System::WinRT::Direct3D11::IDirect3DDxgiInterfaceAccess,
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
-    Win32::System::WinRT::RoGetActivationFactory,
 };
 
 fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
@@ -40,6 +38,24 @@ fn create_d3d_device() -> windows::core::Result<ID3D11Device> {
             std::ptr::null_mut(),
         )
         .map(|()| device.unwrap())
+    }
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn CreateDirect3D11DeviceFromDXGIDevice<
+    'a,
+    Param0: ::windows::core::IntoParam<'a, IDXGIDevice>,
+>(
+    dxgidevice: Param0,
+) -> ::windows::core::Result<::windows::core::IInspectable> {
+    {
+        let mut result__: *mut ::core::ffi::c_void = ::core::mem::zeroed();
+        //    CreateDirect3D11DeviceFromDXGIDevice(dxgidevice.into_param().abi(), ::core::mem::transmute(&mut result__)).from_abi::<::windows::core::IInspectable>(result__)
+        create_direct3d11_device_from_dxgi_device(
+            dxgidevice.into_param().abi(),
+            ::core::mem::transmute(&mut result__),
+        )
+        .from_abi::<::windows::core::IInspectable>(result__)
     }
 }
 
@@ -90,8 +106,14 @@ impl Capturer {
 
         // Create GrpahicsCaptureItem
         let class_name: HSTRING = HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureItem");
-        let interop =
-            unsafe { RoGetActivationFactory::<HSTRING, IGraphicsCaptureItemInterop>(class_name) }?;
+        let mut factory = std::ptr::null_mut();
+        let hr = unsafe {
+            ro_get_activation_factory(class_name, IGraphicsCaptureItemInterop::IID, &mut factory)
+        };
+        if hr != HRESULT(0) {
+            return Err(Error::from(hr));
+        }
+        let interop = unsafe { IGraphicsCaptureItemInterop::from_abi(factory as *mut _)? };
         dbg!(&interop);
         let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(hwnd) }?;
         let name = item.DisplayName()?;
