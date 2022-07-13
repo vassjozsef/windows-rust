@@ -25,7 +25,10 @@ fn main() -> windows::core::Result<()> {
             "Creating capturer on thread: {:?}",
             std::thread::current().id()
         );
-        let capturer = Capturer::new(windows[0].hwnd).unwrap();
+
+        // select window
+        let index = windows.iter().position(|w| w.name.starts_with("League")).unwrap_or_default();
+        let capturer = Capturer::new(windows[index].hwnd).unwrap();
         capturer.start().ok();
         while !c_should_quit.load(Ordering::Acquire) {
             if let Some(frame) = capturer.frame.lock().unwrap().take() {
