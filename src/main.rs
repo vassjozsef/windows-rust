@@ -27,7 +27,10 @@ fn main() -> windows::core::Result<()> {
         );
 
         // select window
-        let index = windows.iter().position(|w| w.name.starts_with("League")).unwrap_or_default();
+        let index = windows
+            .iter()
+            .position(|w| w.name.starts_with("League"))
+            .unwrap_or_default();
         let capturer = Capturer::new(windows[index].hwnd).unwrap();
         capturer.start().ok();
         while !c_should_quit.load(Ordering::Acquire) {

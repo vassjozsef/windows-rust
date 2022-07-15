@@ -2,10 +2,29 @@ use windows::{
     Win32::Foundation::{BOOL, HWND, LPARAM},
     Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWM_CLOAKED_SHELL},
     Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetAncestor, GetShellWindow, GetWindowLongA, GetWindowTextW, IsWindowVisible,
-        GA_ROOT, GWL_STYLE, WINDOW_STYLE, WS_DISABLED,
+        EnumWindows, GetAncestor, GetShellWindow, GetWindowLongW, GetWindowTextW, IsWindowVisible,
+        GA_ROOT, GWL_EXSTYLE, GWL_STYLE, WINDOW_EX_STYLE, WINDOW_STYLE, WS_DISABLED,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
     },
 };
+
+pub fn get_styles_ex(hwnd: HWND) {
+    unsafe {
+        let styles = WINDOW_EX_STYLE(GetWindowLongW(hwnd, GWL_EXSTYLE) as u32);
+
+        if styles & WS_EX_TRANSPARENT == WS_EX_TRANSPARENT {
+            println!("Window is WS_EX_TRANSPARENT");
+        }
+
+        if styles & WS_EX_TOOLWINDOW == WS_EX_TOOLWINDOW {
+            println!("Window is WS_EX_TOOLWINDOW");
+        }
+
+        if styles & WS_EX_NOACTIVATE == WS_EX_NOACTIVATE {
+            println!("Window is WS_EX_NOACTIVATE");
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Window {
@@ -44,9 +63,8 @@ extern "system" fn enum_window(window: HWND, out: LPARAM) -> BOOL {
     }
 
     unsafe {
-        let style = GetWindowLongA(window, GWL_STYLE);
-        let style = WINDOW_STYLE(style as u32);
-        if style & WS_DISABLED == WS_DISABLED {
+        let styles = WINDOW_STYLE(GetWindowLongW(window, GWL_STYLE) as u32);
+        if styles & WS_DISABLED == WS_DISABLED {
             return true.into();
         }
     }

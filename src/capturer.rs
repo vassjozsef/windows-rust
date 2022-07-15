@@ -1,4 +1,6 @@
 use crate::sys::{create_direct3d11_device_from_dxgi_device, ro_get_activation_factory};
+use crate::window_enum::get_styles_ex;
+
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -104,6 +106,9 @@ impl Capturer {
         let device = direct3d_device.cast::<IDirect3DDevice>()?;
         dbg!(&device);
 
+        println!("Checking window styles");
+        get_styles_ex(hwnd);
+
         // Create GrpahicsCaptureItem
         let class_name: HSTRING = HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureItem");
         let mut factory = std::ptr::null_mut();
@@ -118,7 +123,10 @@ impl Capturer {
         let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(hwnd) }?;
         let name = item.DisplayName()?;
         let mut dim = item.Size()?;
-        println!("Window to be capture: {}, dimensions: {:?}", name, dim);
+        println!(
+            "Window to be capture: {}, handle: {:?}, dimensions: {:?}",
+            name, hwnd, dim
+        );
 
         // Start capture
         let frame_pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
