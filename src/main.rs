@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
+use std::thread;
+use std::time::Duration;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 
 use crate::capturer::Capturer;
@@ -11,6 +13,8 @@ mod window_enum;
 
 fn main() -> windows::core::Result<()> {
     println!("Main thread: {:?}", std::thread::current().id());
+    thread::sleep(Duration::from_secs(10));
+
     // Window enumeration to get HWND of window to be captured
     let windows = Windows::enumerate();
     dbg!(&windows);
