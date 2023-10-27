@@ -17,6 +17,7 @@ use windows::{
         D3D11_SDK_VERSION,
     },
     Win32::Graphics::Dxgi::IDXGIDevice,
+    Win32::Graphics::Gdi::HMONITOR,
     Win32::System::WinRT::Direct3D11::IDirect3DDxgiInterfaceAccess,
     Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop,
 };
@@ -86,7 +87,8 @@ impl IDirect3DDeviceWrapper {
 unsafe impl Send for IDirect3DDeviceWrapper {}
 
 pub struct Capturer {
-    _hwnd: HWND,
+    _hwnd: Option<HWND>,
+    _hmonitor: Option<HMONITOR>,
     frame_pool: Direct3D11CaptureFramePool,
     session: GraphicsCaptureSession,
     frame_arrived: EventRegistrationToken,
@@ -95,7 +97,13 @@ pub struct Capturer {
 }
 
 impl Capturer {
-    pub fn new(hwnd: HWND) -> windows::core::Result<Capturer> {
+    pub fn new(hwnd: Option<HWND>, hmonitor: Option<HMONITOR>) -> windows::core::Result<Capturer> {
+        if hwnd.is_none() && hmonitor.is_none() {
+            return Err(Error::new(
+                HRESULT(0),
+                HSTRING::from("Window or monitor is needed"),
+            ));
+        }
         // Create IDirectD3Device
         let d3d_device = create_d3d_device().ok().unwrap();
         dbg!(&d3d_device);
@@ -106,8 +114,10 @@ impl Capturer {
         let device = direct3d_device.cast::<IDirect3DDevice>()?;
         dbg!(&device);
 
-        println!("Checking window styles");
-        get_styles_ex(hwnd);
+        if let Some(window) = hwnd {
+            println!("Checking window styles");
+            get_styles_ex(window);
+        }
 
         // Create GrpahicsCaptureItem
         let class_name: HSTRING = HSTRING::from("Windows.Graphics.Capture.GraphicsCaptureItem");
@@ -120,7 +130,12 @@ impl Capturer {
         }
         let interop = unsafe { IGraphicsCaptureItemInterop::from_abi(factory as *mut _)? };
         dbg!(&interop);
-        let item = unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(hwnd) }?;
+
+        let item = if let Some(window) = hwnd {
+            unsafe { interop.CreateForWindow::<HWND, GraphicsCaptureItem>(window) }?
+        } else {
+            unsafe { interop.CreateForMonitor::<HMONITOR, GraphicsCaptureItem>(hmonitor.unwrap()) }?
+        };
         let name = item.DisplayName()?;
         let mut dim = item.Size()?;
         println!(
@@ -188,6 +203,7 @@ impl Capturer {
 
         Ok(Capturer {
             _hwnd: hwnd,
+            _hmonitor: hmonitor,
             frame_pool: frame_pool,
             session: session,
             frame_arrived: frame_arrived,
